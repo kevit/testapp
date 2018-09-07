@@ -1,0 +1,68 @@
+---
+- hosts: all
+  gather_facts: no
+  pre_tasks:
+    - raw: test -e /usr/bin/python || (apt -y update && apt install -y python-minimal ca-certificates python-pip python-requests)
+    - setup:
+  handlers:
+    - name: restart demo service
+      service:
+        name: demo
+        state: restarted
+  vars:
+    project_owner: "app"
+    app_dir: "/opt/app"
+  tasks:
+
+    - name: Install Python libs
+      pip: "{{ item }}"
+      with_items:
+        - name: flask
+
+    - name: create group for app
+      group:
+        name: "{{ project_owner }}"
+        state: present
+
+    - name: add user app
+      user:
+        name: "{{ project_owner }}"
+        group: "{{ project_owner }}"
+
+    - name: creates workdir directory
+      file: path="{{ app_dir }}" state=directory owner="{{ project_owner }}" group="{{ project_owner }}" mode=0775
+
+    - name: Deploy app
+      copy:
+        src: app/server.py
+        dest: "{{ app_dir }}"
+        owner: "{{ project_owner }}"
+        group: "{{ project_owner }}"
+        mode: u=rwx,g=rx,o=rx
+
+
+    - name: install systemd
+      template:
+        src: demo.systemd.j2
+        dest: /etc/systemd/system/demo.service
+        owner: root
+        group: root
+        mode: 0644
+      notify: restart demo service
+
+    - name: Start and enable demo service
+      service: name=demo state=started enabled=yes masked=no
+
+
+
+    - include_role: 
+        name: jdauphant.nginx
+      vars:
+        nginx_sites:
+          default:
+            - server_name "{{ external_domain }}"
+            - listen 80
+            - location / { proxy_pass http://demo; }
+        nginx_configs:
+          upstream:
+            - upstream demo { server 127.0.0.1:{{service_port}}; }

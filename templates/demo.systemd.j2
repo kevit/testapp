@@ -1,0 +1,16 @@
+[Unit]
+Description=demo
+Requires=network-online.target
+After=network-online.target
+
+[Service]
+Restart=on-failure
+User={{ project_owner }}
+Group={{ project_owner }}
+PermissionsStartOnly=true
+ExecStart=/usr/bin/python {{ app_dir }}/server.py
+ExecReload=/bin/kill -HUP $MAINPID
+KillSignal=SIGINT
+
+[Install]
+WantedBy=multi-user.target
